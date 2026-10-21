@@ -1,0 +1,34 @@
+services:
+  php-asan:
+    build:
+      context: .
+      args:
+        # Everything is parameterised through the environment:
+        #   PHP_VERSION=8.4.4|8.4.26|8.5.4|8.5.11|8.4.27|8.5.12
+        #   PHP_SHA256=<official sha256 from php.net/releases>
+        #   PHP_SAPI=cli|apache      (apache = Apache prefork + mod_php)
+        #   APPLY_ABLATION=0|1       (1 = removes Z_TRY_ADDREF(progress->data);
+        #                             ablates the UAF to validate the sensitivity
+        #                             of the ASAN detector)
+        PHP_VERSION: "${PHP_VERSION:-8.4.4}"
+        PHP_SHA256: "${PHP_SHA256:-719551f50a81961f802aa9102bf4a1a0b5a315074330ab37bc8035a15f4be71b}"
+        PHP_SAPI: "${PHP_SAPI:-cli}"
+        APPLY_ABLATION: "${APPLY_ABLATION:-0}"
+        ASAN: "${ASAN:-1}"
+    image: php-uaf-lab:${LAB_TAG:-8.4.4-cli}
+    container_name: php-uaf-lab
+    ports:
+      - "8080:8080"
+    environment:
+      # USE_ZEND_ALLOC=0 -> system malloc (ASAN sees the UAFs) but memory_limit
+      # is not accounted for. USE_ZEND_ALLOC=1 -> Zend MM active (real
+      # memory_limit, required for the OOM trigger) without ASAN.
+      USE_ZEND_ALLOC: "${USE_ZEND_ALLOC:-0}"
+      # 1 worker => both requests of the cross-request test land on the same
+      # worker (advisory requirement: producer and consumer, same worker).
+      PHP_CLI_SERVER_WORKERS: "${PHP_CLI_SERVER_WORKERS:-4}"
+      PHP_SAPI: "${PHP_SAPI:-cli}"
+      ASAN_OPTIONS: "alloc_dealloc_mismatch=0:detect_leaks=0:detect_stack_use_after_return=1:halt_on_error=1:abort_on_error=0:allocator_may_return_null=1:symbolize=1:print_scariness=1"
+    ulimits:
+      core: -1
+    restart: "no"
